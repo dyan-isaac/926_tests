@@ -694,3 +694,256 @@ def test_text_stale_after_changes():
     # Position changes too
     t.set_position((0.7, 0.7))
     assert t.stale
+
+
+
+def test_text_get_set_wrap():
+    """Test getting and setting wrap property."""
+    fig, ax = plt.subplots()
+
+    # Default wrap should be False
+    t = ax.text(0.5, 0.5, "Test")
+    assert t.get_wrap() == False
+
+    # Set wrap to True
+    t.set_wrap(True)
+    assert t.get_wrap() == True
+
+    # Set wrap to False
+    t.set_wrap(False)
+    assert t.get_wrap() == False
+
+
+def test_text_parse_math():
+    """Test parse_math property."""
+    fig, ax = plt.subplots()
+
+    # Default parse_math should be True
+    t1 = ax.text(0.1, 0.1, "$x^2$")
+    assert t1.get_parse_math() == True
+
+    # Explicitly set parse_math=False
+    t2 = ax.text(0.2, 0.2, "$x^2$", parse_math=False)
+    assert t2.get_parse_math() == False
+
+    # Change parse_math
+    t1.set_parse_math(False)
+    assert t1.get_parse_math() == False
+
+    t2.set_parse_math(True)
+    assert t2.get_parse_math() == True
+
+
+def test_text_fontfamily_shorthand():
+    """Test font family shorthand properties."""
+    fig, ax = plt.subplots()
+
+    # Test serif font
+    t1 = ax.text(0.1, 0.1, "Serif", family='serif')
+    assert t1.get_fontfamily() == ['serif']
+
+    # Test sans-serif font
+    t2 = ax.text(0.2, 0.2, "Sans-serif", family='sans-serif')
+    assert t2.get_fontfamily() == ['sans-serif']
+
+    # Test monospace font
+    t3 = ax.text(0.3, 0.3, "Monospace", family='monospace')
+    assert t3.get_fontfamily() == ['monospace']
+
+    # Test custom font name
+    t4 = ax.text(0.4, 0.4, "Custom", family='Arial')
+    assert 'Arial' in t4.get_fontfamily()
+
+
+
+def test_text_url_property():
+    """Test URL property for text."""
+    fig, ax = plt.subplots()
+
+    # Default URL should be None
+    t = ax.text(0.5, 0.5, "Hyperlink")
+    assert t.get_url() is None
+
+    # Set URL
+    t.set_url("https://matplotlib.org")
+    assert t.get_url() == "https://matplotlib.org"
+
+    # Create text with URL
+    t2 = ax.text(0.6, 0.6, "Another link", url="https://python.org")
+    assert t2.get_url() == "https://python.org"
+
+
+def test_text_path_effects():
+    """Test path effects for text."""
+    from matplotlib.patheffects import withStroke
+    fig, ax = plt.subplots()
+
+    # Default path effects should be empty
+    t = ax.text(0.5, 0.5, "Text")
+    assert len(t.get_path_effects()) == 0
+
+    # Set path effects
+    stroke = withStroke(linewidth=3, foreground='red')
+    t.set_path_effects([stroke])
+
+    # Check that path effects were set
+    effects = t.get_path_effects()
+    assert len(effects) == 1
+    assert effects[0] == stroke
+
+
+def test_text_get_set_gid():
+    """Test getting and setting gid (group id) for text."""
+    fig, ax = plt.subplots()
+
+    # Default gid should be None
+    t = ax.text(0.5, 0.5, "Text")
+    assert t.get_gid() is None
+
+    # Set gid
+    t.set_gid("text_group")
+    assert t.get_gid() == "text_group"
+
+    # Create text with gid
+    t2 = ax.text(0.6, 0.6, "Text 2", gid="another_group")
+    assert t2.get_gid() == "another_group"
+
+
+
+def test_text_contains_with_bbox():
+    """Test contains method for text with bbox."""
+    fig, ax = plt.subplots()
+    t = ax.text(0.5, 0.5, "Text with bbox",
+                bbox=dict(facecolor='red', edgecolor='blue', pad=10))
+
+    # Draw to initialize
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+
+    # Get window extent
+    bbox = t.get_window_extent(renderer)
+
+    # Create events inside and outside the bbox
+    inside_x = (bbox.x0 + bbox.x1) / 2
+    inside_y = (bbox.y0 + bbox.y1) / 2
+    event_inside = MouseEvent('button_press_event', fig.canvas,
+                              inside_x, inside_y, 1, None)
+
+    outside_x = bbox.x1 + 50
+    outside_y = bbox.y1 + 50
+    event_outside = MouseEvent('button_press_event', fig.canvas,
+                               outside_x, outside_y, 1, None)
+
+    # Test contains method
+    contains_inside, details_inside = t.contains(event_inside)
+    contains_outside, details_outside = t.contains(event_outside)
+
+    assert contains_inside == True
+    assert contains_outside == False
+
+
+
+def test_text_vert_alignment_with_rotation():
+    """Test vertical alignment with rotation."""
+    fig, ax = plt.subplots()
+    alignments = ['top', 'center', 'bottom', 'baseline']
+    texts = []
+
+    # Create text with different vertical alignments and rotation
+    for i, va in enumerate(alignments):
+        t = ax.text(0.2 * i + 0.1, 0.5, "Test", va=va, rotation=45)
+        texts.append(t)
+
+    # Verify that all vertical alignments were set correctly
+    for t, va in zip(texts, alignments):
+        assert t.get_verticalalignment() == va
+
+
+
+def test_text_fontproperties_object():
+    """Test using FontProperties object with text."""
+    from matplotlib.font_manager import FontProperties
+
+    fig, ax = plt.subplots()
+
+    # Create FontProperties
+    font_prop = FontProperties(family='serif', weight='bold', style='italic', size=14)
+
+    # Create text with FontProperties
+    t = ax.text(0.5, 0.5, "Test", fontproperties=font_prop)
+
+    # Check that properties were set
+    assert t.get_fontfamily() == ['serif']
+    assert t.get_weight() == 'bold'
+    assert t.get_style() == 'italic'
+    assert t.get_fontsize() == 14
+
+    # Change font properties
+    new_font = FontProperties(family='sans-serif', weight='normal', size=10)
+    t.set_fontproperties(new_font)
+
+    # Check that properties were updated
+    assert t.get_fontfamily() == ['sans-serif']
+    assert t.get_weight() == 'normal'
+    assert t.get_fontsize() == 10
+
+
+def test_text_custom_rasterized():
+    """Test setting custom rasterized for text."""
+    fig, ax = plt.subplots()
+
+    # Default rasterized should be None or False
+    t = ax.text(0.5, 0.5, "Test")
+    assert t.get_rasterized() in (None, False)
+
+    # Set rasterized to True
+    t.set_rasterized(True)
+    assert t.get_rasterized() == True
+
+    # Set rasterized to False
+    t.set_rasterized(False)
+    assert t.get_rasterized() == False
+
+    # Create text with rasterized=True
+    t2 = ax.text(0.6, 0.6, "Rasterized", rasterized=True)
+    assert t2.get_rasterized() == True
+
+
+def test_text_deepcopy():
+    """Test deepcopy of text objects."""
+    import copy
+
+    fig, ax = plt.subplots()
+    t1 = ax.text(0.5, 0.5, "Original", color='red', fontsize=14)
+
+    # Deep copy the text
+    t2 = copy.deepcopy(t1)
+
+    # Properties should be the same
+    assert t2.get_text() == "Original"
+    assert t2.get_color() == 'red'
+    assert t2.get_fontsize() == 14
+    assert t2.get_position() == (0.5, 0.5)
+
+    # Changing t1 should not affect t2
+    t1.set_text("Changed")
+    t1.set_color('blue')
+    assert t2.get_text() == "Original"
+    assert t2.get_color() == 'red'
+
+
+def test_text_get_set_zorder():
+    """Test getting and setting zorder for text."""
+    fig, ax = plt.subplots()
+
+    # Default zorder
+    t = ax.text(0.5, 0.5, "Test")
+    assert t.get_zorder() == 3  # Default text zorder in matplotlib
+
+    # Set zorder
+    t.set_zorder(10)
+    assert t.get_zorder() == 10
+
+    # Create text with custom zorder
+    t2 = ax.text(0.6, 0.6, "Higher", zorder=20)
+    assert t2.get_zorder() == 20
