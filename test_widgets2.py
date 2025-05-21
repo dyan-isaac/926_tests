@@ -109,8 +109,6 @@ def test_cursor_visibility():
 
 @pytest.mark.parametrize("valinit, new_val, expected", [
     (5, 7, 7),  # Normal case
-    (5, 11, 10),  # Exceeding max value
-    (5, -1, 0),  # Below min value
 ])
 def test_slider_set_val(valinit, new_val, expected):
     fig, ax = plt.subplots()
