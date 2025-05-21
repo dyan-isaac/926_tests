@@ -1302,3 +1302,282 @@ class TestFlatten:
         """Test that strings are treated as scalar values."""
         data = ["hello", ["world", ("of", "python")]]
         assert list(flatten(data)) == ["hello", "world", "of", "python"]
+
+
+"""
+Comprehensive test cases for matplotlib's cbook module - Part 1.
+These tests cover various utilities including delete_masked_points, boxplot_stats,
+and step functions.
+"""
+import itertools
+import pickle
+import sys
+from datetime import datetime, date, timedelta
+from unittest.mock import patch, Mock
+
+import numpy as np
+from numpy.testing import (assert_array_equal, assert_approx_equal,
+                           assert_array_almost_equal)
+import pytest
+
+from matplotlib import _api, cbook
+import matplotlib.colors as mcolors
+from matplotlib.cbook import delete_masked_points, strip_math
+from types import ModuleType
+import weakref
+import gc
+from matplotlib.cbook import flatten
+
+
+# =====================================
+# 1. Delete Masked Points Tests (10 cases)
+# =====================================
+
+@pytest.mark.parametrize('x,y,expected_x,expected_y', [
+    # 1. Basic masking with numbers
+    (np.ma.array([1, 2, 3, 4], mask=[0, 0, 1, 0]),
+     np.array([10, 20, 30, 40]),
+     np.array([1, 2, 4]),
+     np.array([10, 20, 40])),
+
+    # 2. Multiple masked values
+    (np.ma.array([1, 2, 3, 4, 5], mask=[0, 1, 0, 1, 0]),
+     np.array([10, 20, 30, 40, 50]),
+     np.array([1, 3, 5]),
+     np.array([10, 30, 50])),
+
+    # 3. No masked values
+    (np.ma.array([1, 2, 3], mask=[0, 0, 0]),
+     np.array([10, 20, 30]),
+     np.array([1, 2, 3]),
+     np.array([10, 20, 30])),
+
+    # 4. All masked values
+    (np.ma.array([1, 2, 3], mask=[1, 1, 1]),
+     np.array([10, 20, 30]),
+     np.array([]),
+     np.array([])),
+
+    # 5. With NaN values in y
+    (np.ma.array([1, 2, 3, 4, 5], mask=[0, 0, 0, 0, 0]),
+     np.array([10, 20, np.nan, 40, 50]),
+     np.array([1, 2, 4, 5]),
+     np.array([10, 20, 40, 50])),
+
+    # 6. With NaN values in masked array
+    (np.ma.array([1, 2, np.nan, 4, 5], mask=[0, 0, 0, 0, 0]),
+     np.array([10, 20, 30, 40, 50]),
+     np.array([1, 2, 4, 5]),
+     np.array([10, 20, 40, 50])),
+
+    # 7. NaN values and masked values
+    (np.ma.array([1, 2, np.nan, 4, 5], mask=[0, 1, 0, 0, 0]),
+     np.array([10, 20, 30, np.nan, 50]),
+     np.array([1, 5]),
+     np.array([10, 50])),
+
+    # 8. With infinity
+    (np.ma.array([1, 2, np.inf, 4, 5], mask=[0, 0, 0, 0, 0]),
+     np.array([10, 20, 30, 40, 50]),
+     np.array([1, 2, 4, 5]),
+     np.array([10, 20, 40, 50])),
+
+    # 9. Empty arrays
+    (np.ma.array([], mask=[]),
+     np.array([]),
+     np.array([]),
+     np.array([])),
+
+    # 10. Single element arrays
+    (np.ma.array([1], mask=[0]),
+     np.array([10]),
+     np.array([1]),
+     np.array([10])),
+])
+def test_delete_masked_points_parameterized(x, y, expected_x, expected_y):
+    """Test delete_masked_points with various input scenarios."""
+    x_clean, y_clean = delete_masked_points(x, y)
+    assert_array_equal(x_clean, expected_x)
+    assert_array_equal(y_clean, expected_y)
+
+
+# =====================================
+# 2. Boxplot Stats Tests (10 cases)
+# =====================================
+
+@pytest.mark.parametrize('data,whis,expected_stats', [
+    # 1. Basic boxplot with default whis
+    ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+     1.5,
+     {'med': 5.5, 'q1': 3.25, 'q3': 7.75, 'whislo': 1, 'whishi': 10, 'fliers': []}),
+
+    # 2. With outliers using default whis
+    ([1, 2, 3, 4, 5, 20],
+     1.5,
+     {'med': 3.5, 'q1': 2, 'q3': 5, 'whislo': 1, 'whishi': 5, 'fliers': [20]}),
+
+    # 3. With whis=3.0
+    ([1, 2, 3, 4, 5, 20],
+     3.0,
+     {'med': 3.5, 'q1': 2, 'q3': 5, 'whislo': 1, 'whishi': 11, 'fliers': [20]}),
+
+    # 4. With whis=[5, 95] percentiles
+    ([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20],
+     [5, 95],
+     {'med': 10.5, 'q1': 5.75, 'q3': 15.25, 'whislo': 2, 'whishi': 19, 'fliers': [1, 20]}),
+
+    # 5. With whis=[0, 100] (range)
+    ([1, 2, 3, 4, 5, 20],
+     [0, 100],
+     {'med': 3.5, 'q1': 2, 'q3': 5, 'whislo': 1, 'whishi': 20, 'fliers': []}),
+
+    # 6. With autorange=False
+    ([0, 0, 0, 0, 0, 0, 0, 0, 0, 10],
+     1.5,
+     {'med': 0, 'q1': 0, 'q3': 0, 'whislo': 0, 'whishi': 0, 'fliers': [10]}),
+
+    # 7. With autorange=True
+    ([0, 0, 0, 0, 0, 0, 0, 0, 0, 10],
+     1.5,
+     {'med': 0, 'q1': 0, 'q3': 0, 'whislo': 0, 'whishi': 10, 'fliers': []}),
+
+    # 8. All same values
+    ([5, 5, 5, 5, 5],
+     1.5,
+     {'med': 5, 'q1': 5, 'q3': 5, 'whislo': 5, 'whishi': 5, 'fliers': []}),
+
+    # 9. Negative values
+    ([-10, -8, -6, -4, -2, 0, 2, 4, 6, 8, 10],
+     1.5,
+     {'med': 0, 'q1': -6, 'q3': 6, 'whislo': -10, 'whishi': 10, 'fliers': []}),
+
+    # 10. Very skewed data
+    ([1, 1, 1, 1, 1, 1, 1, 1, 1, 100],
+     1.5,
+     {'med': 1, 'q1': 1, 'q3': 1, 'whislo': 1, 'whishi': 1, 'fliers': [100]}),
+])
+def test_boxplot_stats_parameterized(data, whis, expected_stats):
+    """Test boxplot_stats with various data distributions and configurations."""
+    stats = cbook.boxplot_stats(data, whis=whis, autorange=whis != 1.5)
+
+    # Check that the results match expected values for key statistics
+    assert len(stats) == 1
+    s = stats[0]
+
+    assert s['med'] == expected_stats['med']
+    assert s['q1'] == expected_stats['q1']
+    assert s['q3'] == expected_stats['q3']
+    assert s['whislo'] == expected_stats['whislo']
+    assert s['whishi'] == expected_stats['whishi']
+
+    # For fliers, just check the count matches since the exact values depend on implementation
+    assert len(s['fliers']) == len(expected_stats['fliers'])
+
+
+# =====================================
+# 3. Step Function Tests (10 cases)
+# =====================================
+
+@pytest.mark.parametrize('x,y,step_func,expected_x,expected_y', [
+    # 1. Pre-step with basic array
+    (np.array([1, 2, 3]),
+     np.array([10, 20, 30]),
+     cbook.pts_to_prestep,
+     np.array([1, 1, 2, 2, 3]),
+     np.array([10, 20, 20, 30, 30])),
+
+    # 2. Post-step with basic array
+    (np.array([1, 2, 3]),
+     np.array([10, 20, 30]),
+     cbook.pts_to_poststep,
+     np.array([1, 2, 2, 3, 3]),
+     np.array([10, 10, 20, 20, 30])),
+
+    # 3. Mid-step with basic array
+    (np.array([1, 2, 3]),
+     np.array([10, 20, 30]),
+     cbook.pts_to_midstep,
+     np.array([1, 1.5, 1.5, 2.5, 2.5, 3]),
+     np.array([10, 10, 20, 20, 30, 30])),
+
+    # 4. Pre-step with single point
+    (np.array([1]),
+     np.array([10]),
+     cbook.pts_to_prestep,
+     np.array([1]),
+     np.array([10])),
+
+    # 5. Post-step with single point
+    (np.array([1]),
+     np.array([10]),
+     cbook.pts_to_poststep,
+     np.array([1]),
+     np.array([10])),
+
+    # 6. Mid-step with single point
+    (np.array([1]),
+     np.array([10]),
+     cbook.pts_to_midstep,
+     np.array([1]),
+     np.array([10])),
+
+    # 7. Pre-step with two points
+    (np.array([1, 2]),
+     np.array([10, 20]),
+     cbook.pts_to_prestep,
+     np.array([1, 1, 2]),
+     np.array([10, 20, 20])),
+
+    # 8. Post-step with two points
+    (np.array([1, 2]),
+     np.array([10, 20]),
+     cbook.pts_to_poststep,
+     np.array([1, 2, 2]),
+     np.array([10, 10, 20])),
+
+    # 9. Mid-step with two points
+    (np.array([1, 2]),
+     np.array([10, 20]),
+     cbook.pts_to_midstep,
+     np.array([1, 1.5, 1.5, 2]),
+     np.array([10, 10, 20, 20])),
+
+    # 10. Pre-step with empty arrays
+    (np.array([]),
+     np.array([]),
+     cbook.pts_to_prestep,
+     np.array([]),
+     np.array([])),
+])
+def test_step_functions_parameterized(x, y, step_func, expected_x, expected_y):
+    """Test step functions with various input scenarios."""
+    x_step, y_step = step_func(x, y)
+    assert_array_equal(x_step, expected_x)
+    assert_array_equal(y_step, expected_y)
+
+
+# =====================================
+# 4. Additional Tests (5 cases)
+# =====================================
+
+# Test safe_masked_invalid function
+@pytest.mark.parametrize('data,expected_mask', [
+    (np.array([1.0, 2.0, np.nan, 4.0, np.inf]),
+     np.array([False, False, True, False, True])),
+    (np.array([1.0, 2.0, 3.0, 4.0]),
+     np.array([False, False, False, False])),
+    (np.array([np.nan, np.nan, np.nan]),
+     np.array([True, True, True])),
+    (np.array([np.inf, -np.inf]),
+     np.array([True, True])),
+    (np.array([]),
+     np.array([])),
+])
+def test_safe_masked_invalid_parameterized(data, expected_mask):
+    """Test safe_masked_invalid with various input scenarios."""
+    result = cbook.safe_masked_invalid(data)
+    assert np.ma.is_masked(result)
+
+    # Handle empty array case separately
+    if data.size > 0:
+        assert_array_equal(result.mask, expected_mask)

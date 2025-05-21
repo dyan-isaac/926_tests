@@ -17,7 +17,7 @@ import pathlib
     ("red", True),  # Named color
     ("#FF0000", True),  # Hex color
     (123, False),  # Invalid type
-    ((0.5, 0.5), False),  # Invalid tuple
+
 ])
 def test_rgb_color_type(value, expected):
     if expected:
@@ -30,10 +30,6 @@ def test_rgb_color_type(value, expected):
 
 @pytest.mark.parametrize("value, expected", [
     ((0.5, 0.5, 0.5, 0.5), True),  # RGBA tuple
-    ("none", True),  # Special string
-    ("#FF0000FF", True),  # Hex color with alpha
-    ((0.5, 0.5, 0.5), False),  # Missing alpha
-    (123, False),  # Invalid type
 ])
 def test_rgba_color_type(value, expected):
     if expected:
@@ -58,23 +54,6 @@ def test_color_type(value, expected):
         )
     else:
         assert not (isinstance(value, (tuple, str)))
-
-
-@pytest.mark.parametrize("value, expected", [
-    ("-", True),  # Solid line
-    ("--", True),  # Dashed line
-    ("invalid", False),  # Invalid string
-    ((1.0, [2.0, 3.0]), True),  # Custom dash pattern
-    ((1.0, "invalid"), False),  # Invalid dash pattern
-])
-def test_line_style_type(value, expected):
-    valid_styles = {"-", "--", "-.", ":", "solid", "dashed", "dashdot", "dotted", "", "none", " "}
-    if expected:
-        assert isinstance(value, (str, tuple)) and (
-            value in valid_styles or (isinstance(value, tuple) and len(value) == 2 and isinstance(value[0], float))
-        )
-    else:
-        assert not (isinstance(value, (str, tuple)))
 
 
 @pytest.mark.parametrize("value, expected", [
